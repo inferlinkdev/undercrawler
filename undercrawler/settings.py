@@ -12,6 +12,7 @@ AUTOLOGIN_URL = 'http://127.0.0.1:8089'
 AUTOLOGIN_ENABLED = True
 CRAZY_SEARCH_ENABLED = True
 FOLLOW_LINKS = True
+DUPEFILTER_DEBUG = True
 
 CDR_CRAWLER = 'scrapy undercrawler'
 CDR_TEAM = 'HG'
@@ -22,6 +23,7 @@ MAX_DOMAIN_SEARCH_FORMS = 10
 HARD_URL_CONSTRAINT = False
 AVOID_DUP_CONTENT_ENABLED = True
 
+#FILES_STORE = 'file:///Users/neha/projects/ucfiles'
 FILES_STORE_S3_ACL = 'public-read'
 # Set FILES_STORE to enable
 ITEM_PIPELINES = {

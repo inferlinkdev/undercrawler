@@ -22,18 +22,21 @@ from autologin_middleware import link_looks_like_logout
 
 from .crazy_form_submitter import search_form_requests
 from .utils import cached_property, load_directive, using_splash
+from lxml import etree
 import undercrawler.settings
+import json
 
 
 class BaseSpider(scrapy.Spider):
     name = 'undercrawler'
-
+          
     def __init__(self, url, search_terms=None, *args, **kwargs):
         if url.startswith('.') or url.startswith('/'):
             with Path(url).open('rt', encoding='utf8') as f:
                 urls = [line.strip() for line in f]
         else:
             urls = [u for u in url.split() if u]
+        print('search terms - ' + str(search_terms))
         self.start_urls = [add_http_if_no_scheme(_url) for _url in urls]
         self.search_terms = search_terms
         self._extra_search_terms = None  # lazy-loaded via extra_search_terms
@@ -47,9 +50,39 @@ class BaseSpider(scrapy.Spider):
         # Load headless horseman scripts
         self.lua_source = load_directive('headless_horseman.lua')
         self.js_source = load_directive('headless_horseman.js')
+        
+        
+        self.forms_info = list()
+        forms_info_str = list()
+        
+        
+#        print('file path --- ' + forms_input) - added to argument list
+        
+        with Path('/Users/neha/projects/openwatch/forms-info.txt').open('r', encoding='utf8') as f:
+          for line in f:
+            line = line.rstrip('\n')
+            print('LINE -- ' + line)
+            forms_info_str.append(line)
+
+
+        num_forms = len(forms_info_str)//4
+        if num_forms > 0:
+          for x in range(num_forms):
+            print('form idx - ' + str(x))
+            line_idx = x*4
+            form_url = forms_info_str[line_idx]
+            form_param = json.loads(forms_info_str[line_idx + 1])
+            form_data = json.loads(forms_info_str[line_idx + 2])
+            form_method = forms_info_str[line_idx + 3]
+            form = (form_url, form_param, form_data, form_method)
+            self.forms_info.append(form)
+          print('WHOLE LIST -- ' + json.dumps(self.forms_info))
+        
         super().__init__(*args, **kwargs)
 
+
     def start_requests(self):
+#        print('file path from settings - ' + self.settings.get('FORMS_INPUT_FILE')) -- added as setting while running the crawl
         self.use_splash = using_splash(self.settings)
         for url in self.start_urls:
             yield self.make_request(url, callback=self.parse_first)
@@ -59,27 +92,7 @@ class BaseSpider(scrapy.Spider):
         callback = callback or self.parse
         cls = cls or (SplashRequest if self.use_splash else Request)
         if self.use_splash:
-            settings = self.settings
-            splash_args = {
-                'lua_source': self.lua_source,
-                'js_source': self.js_source,
-                'run_hh': settings.getbool('RUN_HH'),
-                'return_png': settings.getbool('SCREENSHOT'),
-                'images_enabled': settings.getbool('IMAGES_ENABLED'),
-            }
-            for s in ['VIEWPORT_WIDTH', 'VIEWPORT_HEIGHT',
-                      'SCREENSHOT_WIDTH', 'SCREENSHOT_HEIGHT']:
-                if self.settings.get(s):
-                    splash_args[s.lower()] = self.settings.getint(s)
-            if self.settings.getbool('ADBLOCK'):
-                splash_args['filters'] = 'fanboy-annoyance,easylist'
-            if self.settings.getbool('FORCE_TOR'):
-                splash_args['proxy'] = 'tor'
-            kwargs.update(dict(
-                args=splash_args,
-                endpoint='execute',
-                cache_args=['lua_source', 'js_source'],
-            ))
+            kwargs.update(self.setup_splash_args())
         meta = meta or {}
         meta['avoid_dup_content'] = True
         return cls(url, callback=callback, meta=meta, **kwargs)
@@ -97,19 +110,26 @@ class BaseSpider(scrapy.Spider):
     def parse(self, response):
         if not self.link_extractor.matches(response.url):
             return
+          
+        
 
         request_meta = {
             'from_search': response.meta.get('is_search'),
             'extracted_at': response.url,
         }
 
+        
         def request(url, meta=None, **kwargs):
             meta = meta or {}
             meta.update(request_meta)
             return self.make_request(url, meta=meta, **kwargs)
 
+          
         forms = (formasaurus.extract_forms(response.text) if response.text
                  else [])
+#        for x in forms:          
+#          print(etree.tostring(x[0], pretty_print=True)) 
+#          print(x[1])
         metadata = dict(
             is_page=response.meta.get('is_page', False),
             is_onclick=response.meta.get('is_onclick', False),
@@ -122,45 +142,131 @@ class BaseSpider(scrapy.Spider):
             forms=[meta for _, meta in forms],
             screenshot=self._take_screenshot(response),
         )
+        
         follow_urls = {link_to_url(link) for link in
                        self.link_extractor.extract_links(response)
                        if not self._looks_like_logout(link, response)}
+
         yield self.text_cdr_item(
             response, follow_urls=follow_urls, metadata=metadata)
+            
+#        form = (
+#          'http://mdocweb.state.mi.us/OTIS2/otis2.aspx', 
+#          {'formname':'form1'}, 
+#          [
+#            {'txtboxLName': 'Smith', 'txtboxFName': 'Jack'},
+#            {'txtboxLName': 'Smith', 'txtboxFName': 'John'}
+#          ], 
+#          'GET'
+#        )
+        
+        
+#        print('before splash form')
+        #for http://mdocweb.state.mi.us/OTIS2/otis2.aspx
+        for form in self.forms_info:
+          print('url is --- ' + form[0] + " " + response.url)
+#          if response.url == form[0]:
+          if search_re(form[0], response.url):
+            print('Url regex matched')
+            kwargs = {}
+            if self.use_splash:
+              kwargs.update(self.setup_splash_args())            
+            meta = {}
+            meta['avoid_dup_content'] = True
+            meta.update(request_meta)
+            
+            kwargs.update(form[1])
+            
+            for formd in form[2]:
+              print('===== Submitting FORM again ========' + json.dumps(formd))
+              yield SplashFormRequest.from_response(
+                response,  
+                formdata=formd,
+                method=form[3],
+                callback=self.parse,
+                meta=meta.copy(), **kwargs)
+              print('===== RIGHT HERE AFTER YIELD =====' + json.dumps(formd))
+        
+        #for http://www.wpc.ncep.noaa.gov/html/heatindex.shtml
+#        yield SplashFormRequest.from_response(
+#          response, 
+#          formnumber=4, 
+#          formdata={'tempair2': '78', 'dewpoint': '72'},
+#          clickdata={'type':'button', 'value': 'Calculate'},
+#          callback=self.after_form); 
 
-        if not self.settings.getbool('FOLLOW_LINKS'):
-            return
-
-        if self.settings.getbool('PREFER_PAGINATION'):
-            # Follow pagination links; pagination is not a subject of
-            # a max depth limit. This also prioritizes pagination links because
-            # depth is not increased for them.
-            with _dont_increase_depth(response):
-                for url in self._pagination_urls(response):
-                    # self.logger.debug('Pagination link found: %s', url)
-                    yield request(url, meta={'is_page': True})
-
-        # Follow all in-domain links.
-        # Pagination requests are sent twice, but we don't care because
-        # they're be filtered out by a dupefilter.
-        for url in follow_urls:
-            yield request(url)
-
-        # urls extracted from onclick handlers
-        for url in get_js_links(response):
-            priority = 0 if _looks_like_url(url) else -15
-            url = response.urljoin(url)
-            yield request(url, meta={'is_onclick': True}, priority=priority)
-
-        # go to iframes
-        for link in self.iframe_link_extractor.extract_links(response):
-            yield request(link_to_url(link), meta={'is_iframe': True})
+        #for https://www.agweb.com/markets/cash-grain-bids/
+#        yield SplashFormRequest.from_response(
+#          response, 
+#          formid="main", 
+#          formdata={'CT_Main_0$txtZip': '90277'},
+#          callback=self.after_form); 
+        
+#        if not self.settings.getbool('FOLLOW_LINKS'):
+#            return
+#
+#        if self.settings.getbool('PREFER_PAGINATION'):
+#            # Follow pagination links; pagination is not a subject of
+#            # a max depth limit. This also prioritizes pagination links because
+#            # depth is not increased for them.
+#            with _dont_increase_depth(response):
+#                for url in self._pagination_urls(response):
+#                    # self.logger.debug('Pagination link found: %s', url)
+#                    yield request(url, meta={'is_page': True})
+#
+#        # Follow all in-domain links.
+#        # Pagination requests are sent twice, but we don't care because
+#        # they're be filtered out by a dupefilter.
+#        for url in follow_urls:
+#            yield request(url)
+#
+#        # urls extracted from onclick handlers
+#        for url in get_js_links(response):
+#            priority = 0 if _looks_like_url(url) else -15
+#            url = response.urljoin(url)
+#            yield request(url, meta={'is_onclick': True}, priority=priority)
+#
+#        # go to iframes
+#        for link in self.iframe_link_extractor.extract_links(response):
+#            yield request(link_to_url(link), meta={'is_iframe': True})
 
         # Try submitting forms
         for form, meta in forms:
+            print('in forms ' + meta['form'])
             for request_kwargs in self.handle_form(response.url, form, meta):
                 yield request(**request_kwargs)
-
+            
+#    def after_form(self, response):
+#        print("in after_login")
+#        print(response.body)
+##        if response.body.find(b"matches found") != -1:
+#        print("Test successful")
+    
+    def setup_splash_args(self):
+        kwargs = {}
+        settings = self.settings
+        splash_args = {
+            'lua_source': self.lua_source,
+            'js_source': self.js_source,
+            'run_hh': settings.getbool('RUN_HH'),
+            'return_png': settings.getbool('SCREENSHOT'),
+            'images_enabled': settings.getbool('IMAGES_ENABLED'),
+        }
+        for s in ['VIEWPORT_WIDTH', 'VIEWPORT_HEIGHT',
+                  'SCREENSHOT_WIDTH', 'SCREENSHOT_HEIGHT']:
+            if self.settings.get(s):
+                splash_args[s.lower()] = self.settings.getint(s)
+        if self.settings.getbool('ADBLOCK'):
+            splash_args['filters'] = 'fanboy-annoyance,easylist'
+        if self.settings.getbool('FORCE_TOR'):
+            splash_args['proxy'] = 'tor'
+        kwargs.update(dict(
+            args=splash_args,
+            endpoint='execute',
+            cache_args=['lua_source', 'js_source'],
+        ))
+        return kwargs
+      
     def handle_form(self, url, form, meta):
         action = canonicalize_url(urljoin(url, form.action))
         if not self.link_extractor.matches(action):
@@ -170,6 +276,7 @@ class BaseSpider(scrapy.Spider):
                 action not in self.handled_search_forms and
                 len(self.handled_search_forms) <
                 self.settings.getint('MAX_DOMAIN_SEARCH_FORMS')):
+            print('FORM FORM')
             self.logger.debug('Found a search form at %s', url)
             self.handled_search_forms.add(action)
             for request_kwargs in search_form_requests(
@@ -282,7 +389,10 @@ class BaseSpider(scrapy.Spider):
         self.logger.debug('Saved %s screenshot to %s' % (response, path))
         return str(path)
 
-
+def search_re(regex_str, content):
+    regex = re.escape(regex_str)
+    return re.search(regex_str, content)
+  
 class ArachnadoSpider(BaseSpider):
     name = 'undercrawler_arachnado'
     custom_settings = Settings()
