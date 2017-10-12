@@ -201,27 +201,28 @@ class BaseSpider(scrapy.Spider):
             if url_extract_info:
               url_extract_method = url_extract_info['extractionMethod']
               if url_extract_method == 'inferlink':
-                extract_urls = url_extract_info.['urls']
-                for extract_url in extract_urls:
+                extract_urls = url_extract_info.get['urls']
+                for extract_url in (extract_urls or []):
                   allowed_follow_urls.append(extract_url)
               else:
-                url_regexes_allow = url_extract_info['urlRegexesAllow']
-                url_regexes_deny = url_extract_info['urlRegexesDeny']
-                for follow_url in follow_urls:
-                  not_follow = false
+                url_regexes_allow = url_extract_info.get('urlRegexesAllow')
+                url_regexes_deny = url_extract_info.get('urlRegexesDeny')
+                for follow_url in (follow_urls or []):
+                  not_follow = False
                   for url_regex_deny in url_regexes_deny:
                     if search_re(url_regex_deny, follow_url):
-                      not_follow = true
+                      not_follow = True
                       break
-                  for url_regex_allow in url_regexes_allow:
+                  for url_regex_allow in (url_regexes_allow or []):
                     if search_re(url_regex_allow, follow_url):  
-                      not_follow = false
+                      not_follow = False
                       break
 
                   if not not_follow:
                     allowed_follow_urls.append(follow_url)
-              else:
-                allowed_follow_urls = list(follow_urls)
+            else:
+              print('DEFAULT URLS')
+              allowed_follow_urls = list(follow_urls)
 
             print('Number of urls to be followed - ', len(allowed_follow_urls))
             # Follow all the allowed in-domain links.
