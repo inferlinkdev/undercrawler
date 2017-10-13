@@ -208,20 +208,20 @@ class BaseSpider(scrapy.Spider):
                 url_regexes_allow = url_extract_info.get('urlRegexesAllow')
                 url_regexes_deny = url_extract_info.get('urlRegexesDeny')
                 for follow_url in (follow_urls or []):
-                  not_follow = False
-                  for url_regex_deny in url_regexes_deny:
+                  follow = True
+                  for url_regex_deny in (url_regexes_deny or []):
                     if search_re(url_regex_deny, follow_url):
-                      not_follow = True
+                      follow = False
                       break
-                  for url_regex_allow in (url_regexes_allow or []):
-                    if search_re(url_regex_allow, follow_url):  
-                      not_follow = False
-                      break
-
-                  if not not_follow:
+                  if follow and url_regexes_allow:
+                    follow = False                    
+                    for url_regex_allow in (url_regexes_allow or []):
+                      if search_re(url_regex_allow, follow_url):  
+                        follow = True
+                        break                  
+                  if follow:
                     allowed_follow_urls.append(follow_url)
             else:
-              print('DEFAULT URLS')
               allowed_follow_urls = list(follow_urls)
 
             print('Number of urls to be followed - ', len(allowed_follow_urls))
