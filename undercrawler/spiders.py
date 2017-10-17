@@ -201,7 +201,7 @@ class BaseSpider(scrapy.Spider):
             if url_extract_info:
               url_extract_method = url_extract_info['extractionMethod']
               if url_extract_method == 'inferlink':
-                extract_urls = url_extract_info.get['urls']
+                extract_urls = url_extract_info.get('urls')
                 for extract_url in (extract_urls or []):
                   allowed_follow_urls.append(extract_url)
               else:
