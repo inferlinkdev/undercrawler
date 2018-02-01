@@ -257,14 +257,14 @@ class BaseSpider(scrapy.Spider):
                     meta=meta.copy(), **kwargs)
                   
             # urls extracted from onclick handlers
-            for url in get_js_links(response):
-                priority = 0 if _looks_like_url(url) else -15
-                url = response.urljoin(url)
-                yield request(url, meta={'is_onclick': True}, priority=priority)
+#            for url in get_js_links(response):
+#                priority = 0 if _looks_like_url(url) else -15
+#                url = response.urljoin(url)
+#                yield request(url, meta={'is_onclick': True}, priority=priority)
 
             # go to iframes
-            for link in self.iframe_link_extractor.extract_links(response):
-                yield request(link_to_url(link), meta={'is_iframe': True})
+#            for link in self.iframe_link_extractor.extract_links(response):
+#                yield request(link_to_url(link), meta={'is_iframe': True})
 
             # break out of for loop
             break
