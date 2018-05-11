@@ -65,9 +65,15 @@ class BaseSpider(scrapy.Spider):
 #            forms_info_str.append(line)
         
         #'/users/neha/projects/openwatch/page-config.json'
-        with Path(page_config_file).open('r', encoding='utf8') as f:
-          self.pages_data = json.load(f)
-          print(self.pages_data)
+        if page_config_file:
+          with Path(page_config_file).open('r', encoding='utf8') as f:
+            self.pages_data = json.load(f)
+            self.pages_cfg = self.pages_data['pagesInfo']
+            print(self.pages_cfg)
+        else:
+          self.pages_cfg = []
+          print('no page_config_file specified')
+        
 
 #        num_forms = len(forms_info_str)//4
 #        if num_forms > 0:
@@ -155,16 +161,28 @@ class BaseSpider(scrapy.Spider):
 #          print('Google request again')
 ##          yield request('http://www.google.com')
           
-        # page classification
-        pages = self.pages_data['pagesInfo']
-        for pg in pages:
+  
+#        if there is no file
+#    then pages can be an empty array
+#    for will not do nothing
+#    for each page say page_valid=true beforehand
+#    and also start with a null urlExtractionInfo
+
+        
+        page_valid = True
+        url_extract_info = None
+        forms = []
+        
+        # page classification 
+        #pages = self.pages_data['pagesInfo']
+        for pg in self.pages_cfg:
           page_name = pg.get('pageName')
-          print(page_name)
+#          print(page_name)
       
           # check if the page gets classified
           url_regex = pg.get('urlRegex')
           content_regex = pg.get('contentRegex')
-          page_valid = True
+          #page_valid = True
           if url_regex:
             print(search_re(url_regex, response.url))
             if not search_re(url_regex, response.url):
@@ -172,102 +190,103 @@ class BaseSpider(scrapy.Spider):
           if content_regex:
             if not search_re(content_regex, response.body.decode("utf-8")):
               page_valid = False
-
           if page_valid:
-            # do rest of the processing
-            print('PAGE is VALID --', response.url)
-            follow_urls = {link_to_url(link) for link in
-                           self.link_extractor.extract_links(response)
-                           if not self._looks_like_logout(link, response)}
-
-            yield self.text_cdr_item(
-                response, follow_urls=follow_urls, metadata=metadata)
-
-            if not self.settings.getbool('FOLLOW_LINKS'):
-                return
-          
-            if self.settings.getbool('PREFER_PAGINATION'):
-                # Follow pagination links; pagination is not a subject of
-                # a max depth limit. This also prioritizes pagination links because
-                # depth is not increased for them.
-                with _dont_increase_depth(response):
-                    for url in self._pagination_urls(response):
-                        # self.logger.debug('Pagination link found: %s', url)
-                        yield request(url, meta={'is_page': True})
-
-            #url extraction processing
-            allowed_follow_urls = list()
             url_extract_info = pg.get('urlExtractionInfo')
-            if url_extract_info:
-              url_extract_method = url_extract_info['extractionMethod']
-              if url_extract_method == 'inferlink':
-                extract_urls = url_extract_info.get('urls')
-                for extract_url in (extract_urls or []):
-                  allowed_follow_urls.append(extract_url)
-              else:
-                url_regexes_allow = url_extract_info.get('urlRegexesAllow')
-                url_regexes_deny = url_extract_info.get('urlRegexesDeny')
-                for follow_url in (follow_urls or []):
-                  follow = True
-                  for url_regex_deny in (url_regexes_deny or []):
-                    if search_re(url_regex_deny, follow_url):
-                      follow = False
-                      break
-                  if follow and url_regexes_allow:
-                    follow = False                    
-                    for url_regex_allow in (url_regexes_allow or []):
-                      if search_re(url_regex_allow, follow_url):  
-                        follow = True
-                        break                  
-                  if follow:
-                    allowed_follow_urls.append(follow_url)
-            else:
-              allowed_follow_urls = list(follow_urls)
-
-            print('Number of urls to be followed - ', len(allowed_follow_urls))
-            # Follow all the allowed in-domain links.
-            # Pagination requests are sent twice, but we don't care because
-            # they're be filtered out by a dupefilter.
-            for url in allowed_follow_urls:
-                yield request(url)
-
-            # forms processing
             forms = pg.get('formsInfo')
-            for form in (forms or []):
-              form_identity = json.loads(form['identity'])
-              form_method = form['method']
-              form_params_list = form['params']
-              
-              kwargs = {}
-              if self.use_splash:
-                kwargs.update(self.setup_splash_args())            
-              meta = {}
-              meta['avoid_dup_content'] = True
-              meta.update(request_meta)
-              kwargs.update(form_identity)
-              
-              for form_params in form_params_list:              
-                # SplashRequest for all the params
-                  print('===== Submitting FORM again ========' + json.dumps(form_params))
-                  yield SplashFormRequest.from_response(
-                    response,  
-                    formdata=form_params,
-                    method=form_method,
-                    callback=self.parse,
-                    meta=meta.copy(), **kwargs)
-                  
-            # urls extracted from onclick handlers
+            break
+        
+        if not page_valid:
+          print('the page did not pass through any of the specified page classifiers', response.url)
+        else:
+          # do rest of the processing
+#          print('PAGE is VALID --', response.url)
+          follow_urls = {link_to_url(link) for link in
+                         self.link_extractor.extract_links(response)
+                         if not self._looks_like_logout(link, response)}
+
+          yield self.text_cdr_item(
+              response, follow_urls=follow_urls, metadata=metadata)
+
+          if not self.settings.getbool('FOLLOW_LINKS'):
+              return
+
+          if self.settings.getbool('PREFER_PAGINATION'):
+              # Follow pagination links; pagination is not a subject of
+              # a max depth limit. This also prioritizes pagination links because
+              # depth is not increased for them.
+              with _dont_increase_depth(response):
+                  for url in self._pagination_urls(response):
+                      # self.logger.debug('Pagination link found: %s', url)
+                      yield request(url, meta={'is_page': True})
+
+          #url extraction processing
+          allowed_follow_urls = list()
+          if url_extract_info:
+            url_extract_method = url_extract_info['extractionMethod']
+            if url_extract_method == 'inferlink':
+              extract_urls = url_extract_info.get('urls')
+              for extract_url in (extract_urls or []):
+                allowed_follow_urls.append(extract_url)
+            else:
+              url_regexes_allow = url_extract_info.get('urlRegexesAllow')
+              url_regexes_deny = url_extract_info.get('urlRegexesDeny')
+              for follow_url in (follow_urls or []):
+                follow = True
+                for url_regex_deny in (url_regexes_deny or []):
+                  if search_re(url_regex_deny, follow_url):
+                    follow = False
+                    break
+                if follow and url_regexes_allow:
+                  follow = False                    
+                  for url_regex_allow in (url_regexes_allow or []):
+                    if search_re(url_regex_allow, follow_url):  
+                      follow = True
+                      break                  
+                if follow:
+                  allowed_follow_urls.append(follow_url)
+          else:
+            allowed_follow_urls = list(follow_urls)
+
+#          print('Number of urls to be followed - ', len(allowed_follow_urls))
+          # Follow all the allowed in-domain links.
+          # Pagination requests are sent twice, but we don't care because
+          # they're be filtered out by a dupefilter.
+          for url in allowed_follow_urls:
+              yield request(url)
+
+          # forms processing
+          for form in (forms or []):
+            form_identity = json.loads(form['identity'])
+            form_method = form['method']
+            form_params_list = form['params']
+
+            kwargs = {}
+            if self.use_splash:
+              kwargs.update(self.setup_splash_args())            
+            meta = {}
+            meta['avoid_dup_content'] = True
+            meta.update(request_meta)
+            kwargs.update(form_identity)
+
+            for form_params in form_params_list:              
+              # SplashRequest for all the params
+#                print('===== Submitting FORM again ========' + json.dumps(form_params))
+                yield SplashFormRequest.from_response(
+                  response,  
+                  formdata=form_params,
+                  method=form_method,
+                  callback=self.parse,
+                  meta=meta.copy(), **kwargs)
+
+          # urls extracted from onclick handlers
 #            for url in get_js_links(response):
 #                priority = 0 if _looks_like_url(url) else -15
 #                url = response.urljoin(url)
 #                yield request(url, meta={'is_onclick': True}, priority=priority)
 
-            # go to iframes
+          # go to iframes
 #            for link in self.iframe_link_extractor.extract_links(response):
 #                yield request(link_to_url(link), meta={'is_iframe': True})
-
-            # break out of for loop
-            break
             
             
 ##        print('before splash form')
@@ -385,7 +404,7 @@ class BaseSpider(scrapy.Spider):
                 action not in self.handled_search_forms and
                 len(self.handled_search_forms) <
                 self.settings.getint('MAX_DOMAIN_SEARCH_FORMS')):
-            print('FORM FORM')
+#            print('FORM FORM')
             self.logger.debug('Found a search form at %s', url)
             self.handled_search_forms.add(action)
             for request_kwargs in search_form_requests(

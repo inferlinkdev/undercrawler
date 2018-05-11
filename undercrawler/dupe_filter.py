@@ -1,5 +1,4 @@
 import re
-import json
 from copy import deepcopy
 
 from scrapy_splash import SplashAwareDupeFilter
@@ -19,6 +18,5 @@ class DupeFilter(SplashAwareDupeFilter):
             url = re.sub(r'^https?://(www\.)?', 'http://', request.url)
             meta = deepcopy(request.meta)
             meta['splash'].setdefault('args', {})['url'] = url
-            request = request.replace(url=url, meta=meta)
-        print('REQUEST === ' + str(request))    
+            request = request.replace(url=url, meta=meta)   
         return super().request_fingerprint(request)
