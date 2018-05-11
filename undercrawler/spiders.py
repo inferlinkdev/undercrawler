@@ -379,6 +379,7 @@ class BaseSpider(scrapy.Spider):
             'run_hh': settings.getbool('RUN_HH'),
             'return_png': settings.getbool('SCREENSHOT'),
             'images_enabled': settings.getbool('IMAGES_ENABLED'),
+            'timeout':300
         }
         for s in ['VIEWPORT_WIDTH', 'VIEWPORT_HEIGHT',
                   'SCREENSHOT_WIDTH', 'SCREENSHOT_HEIGHT']:
