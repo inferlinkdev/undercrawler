@@ -55,7 +55,6 @@ class BaseSpider(scrapy.Spider):
         self.forms_info = list()
         forms_info_str = list()
         
-        
 #        print('file path --- ' + forms_input) - added to argument list
         
 #        with Path('/Users/neha/projects/openwatch/forms-info.txt').open('r', encoding='utf8') as f:
@@ -254,6 +253,16 @@ class BaseSpider(scrapy.Spider):
           for url in allowed_follow_urls:
               yield request(url)
 
+          # urls extracted from onclick handlers
+          for url in get_js_links(response):
+              priority = 0 if _looks_like_url(url) else -15
+              url = response.urljoin(url)
+              yield request(url, meta={'is_onclick': True}, priority=priority)
+
+          # go to iframes
+          for link in self.iframe_link_extractor.extract_links(response):
+              yield request(link_to_url(link), meta={'is_iframe': True})
+
           # forms processing
           for form in (forms or []):
             form_identity = json.loads(form['identity'])
@@ -278,15 +287,7 @@ class BaseSpider(scrapy.Spider):
                   callback=self.parse,
                   meta=meta.copy(), **kwargs)
 
-          # urls extracted from onclick handlers
-#            for url in get_js_links(response):
-#                priority = 0 if _looks_like_url(url) else -15
-#                url = response.urljoin(url)
-#                yield request(url, meta={'is_onclick': True}, priority=priority)
 
-          # go to iframes
-#            for link in self.iframe_link_extractor.extract_links(response):
-#                yield request(link_to_url(link), meta={'is_iframe': True})
             
             
 ##        print('before splash form')
