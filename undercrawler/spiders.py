@@ -176,17 +176,19 @@ class BaseSpider(scrapy.Spider):
         #pages = self.pages_data['pagesInfo']
         for pg in self.pages_cfg:
           page_name = pg.get('pageName')
-#          print(page_name)
+          #print(page_name)
       
           # check if the page gets classified
           url_regex = pg.get('urlRegex')
           content_regex = pg.get('contentRegex')
-          #page_valid = True
+          page_valid = True
           if url_regex:
-            print(search_re(url_regex, response.url))
+            #print(search_re(url_regex, response.url))
             if not search_re(url_regex, response.url):
               page_valid = False
           if content_regex:
+            #print('content_regex not null')
+            #print(search_re(content_regex, response.body.decode("utf-8"))
             if not search_re(content_regex, response.body.decode("utf-8")):
               page_valid = False
           if page_valid:
@@ -250,7 +252,7 @@ class BaseSpider(scrapy.Spider):
           # Follow all the allowed in-domain links.
           # Pagination requests are sent twice, but we don't care because
           # they're be filtered out by a dupefilter.
-          for url in allowed_follow_urls:
+          for url in allowed_follow_urls:              
               yield request(url)
 
           # urls extracted from onclick handlers
