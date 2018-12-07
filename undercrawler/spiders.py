@@ -96,6 +96,7 @@ class BaseSpider(scrapy.Spider):
         for url in self.start_urls:
             yield self.make_request(url, callback=self.parse_first)
 
+
     def make_request(
             self, url, callback=None, meta=None, cls=None, **kwargs):
         callback = callback or self.parse
@@ -176,19 +177,19 @@ class BaseSpider(scrapy.Spider):
         #pages = self.pages_data['pagesInfo']
         for pg in self.pages_cfg:
           page_name = pg.get('pageName')
-          #print(page_name)
+#          print(page_name)
       
           # check if the page gets classified
           url_regex = pg.get('urlRegex')
           content_regex = pg.get('contentRegex')
           page_valid = True
           if url_regex:
-            #print(search_re(url_regex, response.url))
+#            print(search_re(url_regex, response.url))
             if not search_re(url_regex, response.url):
               page_valid = False
           if content_regex:
-            #print('content_regex not null')
-            #print(search_re(content_regex, response.body.decode("utf-8"))
+#            print('content_regex not null')
+#            print(search_re(content_regex, response.body.decode("utf-8")))
             if not search_re(content_regex, response.body.decode("utf-8")):
               page_valid = False
           if page_valid:
@@ -204,6 +205,7 @@ class BaseSpider(scrapy.Spider):
           follow_urls = {link_to_url(link) for link in
                          self.link_extractor.extract_links(response)
                          if not self._looks_like_logout(link, response)}
+          print('Size of follow-urls: ', len(follow_urls))
 
           yield self.text_cdr_item(
               response, follow_urls=follow_urls, metadata=metadata)
@@ -248,11 +250,12 @@ class BaseSpider(scrapy.Spider):
           else:
             allowed_follow_urls = list(follow_urls)
 
-#          print('Number of urls to be followed - ', len(allowed_follow_urls))
+          print('Number of urls to be followed - ', len(allowed_follow_urls))
           # Follow all the allowed in-domain links.
           # Pagination requests are sent twice, but we don't care because
           # they're be filtered out by a dupefilter.
-          for url in allowed_follow_urls:              
+          for url in allowed_follow_urls:
+#              print('url to be followed: ', url)
               yield request(url)
 
           # urls extracted from onclick handlers
@@ -281,7 +284,7 @@ class BaseSpider(scrapy.Spider):
 
             for form_params in form_params_list:              
               # SplashRequest for all the params
-#                print('===== Submitting FORM again ========' + json.dumps(form_params))
+                print('===== Submitting FORM again ========' + json.dumps(form_params))
                 yield SplashFormRequest.from_response(
                   response,  
                   formdata=form_params,
@@ -382,7 +385,8 @@ class BaseSpider(scrapy.Spider):
             'run_hh': settings.getbool('RUN_HH'),
             'return_png': settings.getbool('SCREENSHOT'),
             'images_enabled': settings.getbool('IMAGES_ENABLED'),
-            'timeout':300
+            'timeout':300,
+            'debug': settings.getbool('SPLASH_DEBUG')
         }
         for s in ['VIEWPORT_WIDTH', 'VIEWPORT_HEIGHT',
                   'SCREENSHOT_WIDTH', 'SCREENSHOT_HEIGHT']:

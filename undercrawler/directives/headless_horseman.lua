@@ -6,6 +6,22 @@ function get_arg(arg, default)
   end
 end
 
+function runHH(splash)
+    splash:wait_for_resume([[
+      function main(splash) {
+        __headless_horseman__
+          .wait(3000)
+          .then(__headless_horseman__.tryInfiniteScroll, 3)
+          .then(__headless_horseman__.tryClickXhr, 3)
+          .then(__headless_horseman__.tryMouseoverXhr, 3)
+          .then(__headless_horseman__.scroll, window, 'left', 'top')
+          .then(__headless_horseman__.cleanup)
+       // .then(__headless_horseman__.removeOverlays)
+          .then(splash.resume);
+      }
+    ]])
+end
+
 function main(splash)
   --[[
   The main Headless Horseman directive. It automatically tries every
@@ -13,7 +29,7 @@ function main(splash)
   n scroll, on mouseover, etc.
   ]]
 
-  local debug = get_arg(splash.args.debug, false)
+  local debug = get_arg(splash.args.debug, false)  
   local run_hh = get_arg(splash.args.run_hh, true)
   local return_har = get_arg(splash.args.return_har, true)
   local return_html = get_arg(splash.args.return_html, true)
@@ -66,21 +82,14 @@ function main(splash)
   splash:lock_navigation()
 
   -- Run a battery of Headless Horseman tests.
-
   if run_hh then
-    splash:wait_for_resume([[
-      function main(splash) {
-        __headless_horseman__
-          .wait(3000)
-          .then(__headless_horseman__.tryInfiniteScroll, 3)
-          .then(__headless_horseman__.tryClickXhr, 3)
-          .then(__headless_horseman__.tryMouseoverXhr, 3)
-          .then(__headless_horseman__.scroll, window, 'left', 'top')
-          .then(__headless_horseman__.cleanup)
-       // .then(__headless_horseman__.removeOverlays)
-          .then(splash.resume);
-      }
-    ]])
+    local ok, reason = pcall(runHH,splash)
+    if ok then
+      -- no errors while running 'run_hh'
+    else
+      -- 'run_hh' raised an error: take appropriate actions
+      print('Error in HH scripts: ' .. reason)
+    end
   end
 
   splash:stop()
